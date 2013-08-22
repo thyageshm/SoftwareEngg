@@ -1,0 +1,23 @@
+Welcome to TextBuddy. test.txt is ready for use
+command: Given word -a- is not a recognised command!
+command: test.txt is empty
+command: No string given to be added!
+command: Given index is not a valid number!
+command: Given index is out-of-range of the available number of lines!
+command: Given index is not a valid number!
+command: all content deleted from test.txt
+command: added to test.txt: "Hello World!"
+command: added to test.txt: "maybe"
+command: added to test.txt: "this one is a very long comment..!@"
+command: 1. Hello World!
+2. maybe
+3. this one is a very long comment..!@
+command: deleted from test.txt: "maybe"
+command: 1. Hello World!
+2. this one is a very long comment..!@
+command: Given index is out-of-range of the available number of lines!
+command: 1. Hello World!
+2. this one is a very long comment..!@
+command: all content deleted from test.txt
+command: test.txt is empty
+command: 
