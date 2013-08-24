@@ -28,86 +28,6 @@ import static java.lang.System.out;
 // This class runs the whole TextBuddy program
 public class TextBuddy implements Runnable {
 
-	private enum Command {
-		ADD, DELETE, CLEAR, DISPLAY, EXIT, UNKNOWN
-	}
-
-	private class UserCommandInterpretter {
-		public Command _command;
-		public String _strparam;
-		public int _intparam;
-		final int VALUE_NOT_SET = -1;
-		final int WRONG_VALUE_GIVEN = -2;
-
-		/*
-		 * Takes a user command and splits it into a commandWord and associated
-		 * parameters
-		 */
-		public UserCommandInterpretter(String command) {
-			Scanner userCommandReader = new Scanner(command);
-			try
-			{
-				/* set default values */
-				this._strparam = "";
-				this._intparam = VALUE_NOT_SET;
-				this._command = Command.UNKNOWN;
-				
-				String commandWord = userCommandReader.next().toLowerCase();
-				switch (commandWord) {
-				case "add":
-					this._command = Command.ADD;
-					this._strparam = userCommandReader.nextLine().trim();
-					break;
-				case "delete":
-					this._command = Command.DELETE;
-					this._intparam = GetIntegerFromGivenString(userCommandReader
-							.nextLine().trim());
-					break;
-				case "display":
-					this._command = Command.DISPLAY;
-					break;
-				case "clear":
-					this._command = Command.CLEAR;
-					break;
-				case "exit":
-					this._command = Command.EXIT;
-					break;
-				default:
-					this._command = Command.UNKNOWN;
-					this._strparam = commandWord;
-					break;
-				}
-			} catch(NoSuchElementException e)
-			{
-				if (this._command != Command.UNKNOWN)
-				{
-					this._strparam = "Command inexecutable with given parameters!";
-				}
-				else
-				{
-					this._strparam = "Given word is not a recognised command!";
-				}
-				this._command = Command.UNKNOWN;
-				this._intparam = WRONG_VALUE_GIVEN;
-				
-			} finally
-			{
-				userCommandReader.close();
-			}
-		}
-
-		private int GetIntegerFromGivenString(String parameter) {
-			int requiredInt;
-			try {
-				requiredInt = Integer.parseInt(parameter);
-			} catch (NumberFormatException nfe) {
-				requiredInt = WRONG_VALUE_GIVEN;
-				this._strparam = "Given value is not a valid integer!";
-			}
-			return requiredInt;
-		}
-	}
-
 	/*
 	 * the private attributes include: a string for the name file being used a
 	 * BufferedWriter object to allow for writing to/saving the file a
@@ -161,6 +81,12 @@ public class TextBuddy implements Runnable {
 
 	}
 
+	/* Starts a new thread that does the auto-saving */
+	private void initialiseAutoSaver() {
+		this._autoSaver = new Thread(this);
+		_autoSaver.setPriority(Thread.MAX_PRIORITY);
+	}
+
 	/*
 	 * Loads the existing data from the file and populate the local copy of the
 	 * data
@@ -185,16 +111,11 @@ public class TextBuddy implements Runnable {
 	}
 
 	/* A simple function to kick start TextBuddy */
+
 	public void start() {
 		_autoSaver.start();
 		this.interactWithUserUntilExitCommand();
 		this.close();
-	}
-
-	/* Starts a new thread that does the auto-saving */
-	private void initialiseAutoSaver() {
-		this._autoSaver = new Thread(this);
-		_autoSaver.setPriority(Thread.MAX_PRIORITY);
 	}
 
 	/*
@@ -221,10 +142,10 @@ public class TextBuddy implements Runnable {
 				out.println(deleteLineFromLocalData(newCommand));
 				break;
 			case DISPLAY:
-				out.println(this.displayFileData());
+				out.println(this.displayLocalData());
 				break;
 			case CLEAR:
-				out.println(this.clearFileData(newCommand));
+				out.println(this.clearLocalData(newCommand));
 				break;
 			case EXIT:
 				this.logTheChange(new UserCommandInterpretter("exit"));
@@ -270,13 +191,13 @@ public class TextBuddy implements Runnable {
 		return returnMessage;
 	}
 
-	public String clearFileData(UserCommandInterpretter newCommand) {
+	public String clearLocalData(UserCommandInterpretter newCommand) {
 		this.logTheChange(newCommand);
 		this._localCopyOfFileData.clear();
 		return "all content deleted from " + this._fileName;
 	}
 
-	public String displayFileData() {
+	public String displayLocalData() {
 		String returnString = "";
 		for (int index = 0; index < _localCopyOfFileData.size(); index++) {
 			if (index > 0) {
@@ -290,6 +211,7 @@ public class TextBuddy implements Runnable {
 		return returnString;
 	}
 
+	/* adds the new command to the unsaved changes queue */
 	private void logTheChange(UserCommandInterpretter newCommand) {
 		try {
 			this._unsavedChanges.put(newCommand);
@@ -299,23 +221,23 @@ public class TextBuddy implements Runnable {
 		}
 	}
 
-	/*
-	 * Runs infinitely saving any changes made until interrupted by the main
-	 * thread
-	 */
+	public void run() {
+		this.saveToFile();
+	}
+
+	/* Runs infinitely saving any changes made until program ends */
 	public void saveToFile() {
 		try {
 			UserCommandInterpretter logData;
 			while (true) {
 				logData = this._unsavedChanges.take();
-				// a performance enhancement where regardless of how many items are left in the queue, if the program is over, write the local copy to the file
-				if(logData._command != Command.EXIT && this._hasEnded)
-				{
+				// a performance enhancement where regardless of how many items
+				// are left in the queue, if the program is over, write the
+				// local copy to the file
+				if (logData._command != Command.EXIT && this._hasEnded) {
 					this.writeLocalCopyToFile();
 					return;
-				}
-				else
-				{
+				} else {
 					switch (logData._command) {
 					case ADD:
 						this._bufFileWriter.write(logData._strparam);
@@ -327,8 +249,8 @@ public class TextBuddy implements Runnable {
 						break;
 					case CLEAR:
 						this._bufFileWriter.close();
-						this._bufFileWriter = new BufferedWriter(new FileWriter(
-								new File(this._fileName)));
+						this._bufFileWriter = new BufferedWriter(
+								new FileWriter(new File(this._fileName)));
 						break;
 					case EXIT:
 						return;
@@ -343,12 +265,7 @@ public class TextBuddy implements Runnable {
 			out.println(this._fileName
 					+ " can no longer be modified by the program! Please restart the program to ensure that the changes you make are saved to the disk");
 		} catch (InterruptedException ie) {
-			out.println("save interrupted! size: "
-					+ this._unsavedChanges.size());
-			/*
-			 * Deliberately left empty as the this thread is interrupted by the
-			 * main thread with deliberation
-			 */
+			out.println("save interrupted! size: " + this._unsavedChanges.size());
 		} finally {
 			try {
 				_bufFileWriter.flush();
@@ -359,33 +276,59 @@ public class TextBuddy implements Runnable {
 		return;
 	}
 
+	/* House keeping work */
+	public void close() {
+		if (_autoSaver != null) {
+			try {
+				// inform the auto saver that the program has ended
+				this._hasEnded = true;
+				// wait for auto saver to complete its job
+				this._autoSaver.join();
+			} catch (SecurityException se) {
+				out.println("The main thread has lost access to the _autoSaver thread!");
+			} catch (InterruptedException ie) {
+				ie.printStackTrace();
+			}
+		}
+
+		this._autoSaver = null;
+		this._unsavedChanges.clear();
+		this._localCopyOfFileData.clear();
+		this._fileName = "";
+		this._inputStream.close();
+		try {
+			if (_bufFileWriter != null)
+				this._bufFileWriter.close();
+		} catch (IOException io) {
+			out.println("An error occurred while trying to close the file hander!");
+		}
+		this._hasNotClosed = false;
+	}
+
+	
 	private void writeLocalCopyToFile() {
-		try
-		{
+		try {
 			this._bufFileWriter.close();
-			this._bufFileWriter = new BufferedWriter(new FileWriter(new File(this._fileName)));
+			this._bufFileWriter = new BufferedWriter(new FileWriter(new File(
+					this._fileName)));
 			Iterator<String> iter = this._localCopyOfFileData.iterator();
-			while(iter.hasNext())
-			{
+			while (iter.hasNext()) {
 				this._bufFileWriter.write(iter.next());
 				this._bufFileWriter.newLine();
 			}
-		} catch(IOException ioe)
-		{
+		} catch (IOException ioe) {
 			ioe.printStackTrace();
-		} finally
-		{
-			try
-			{
+		} finally {
+			try {
 				this._bufFileWriter.flush();
-			} catch(IOException ioe)
-			{
+			} catch (IOException ioe) {
 				ioe.printStackTrace();
 			}
 		}
 	}
 
 	/* Deletes a particular line given the number from the file */
+	
 	private boolean deleteLineFromFile(int lineNumber) {
 
 		File tempFile = null;
@@ -451,39 +394,7 @@ public class TextBuddy implements Runnable {
 		return true;
 	}
 
-	public void run() {
-		this.saveToFile();
-	}
-
-	public void close() {
-		if (_autoSaver != null) {
-			try {
-				//inform the auto saver that the program has ended
-				this._hasEnded = true;
-				//wait for auto saver to complete its job
-				this._autoSaver.join();
-			} catch (SecurityException se) {
-				out.println("The main thread has lost access to the _autoSaver thread!");
-			} catch (InterruptedException ie)
-			{
-				ie.printStackTrace();
-			}
-		}
-
-		this._autoSaver = null;
-		this._unsavedChanges.clear();
-		this._localCopyOfFileData.clear();
-		this._fileName = "";
-		this._inputStream.close();
-		try {
-			if (_bufFileWriter != null)
-				this._bufFileWriter.close();
-		} catch (IOException io) {
-			out.println("An error occurred while trying to close the file hander!");
-		}
-		this._hasNotClosed = false;
-	}
-
+	/* call close in case it wasn't */
 	public void finalise() {
 		if (this._hasNotClosed) {
 			this.close();
@@ -520,4 +431,83 @@ public class TextBuddy implements Runnable {
 		}
 		return;
 	}
+
+	private enum Command {
+		ADD, DELETE, CLEAR, DISPLAY, EXIT, UNKNOWN
+	}
+
+	private class UserCommandInterpretter {
+		public Command _command;
+		public String _strparam;
+		public int _intparam;
+		final int VALUE_NOT_SET = -1;
+		final int WRONG_VALUE_GIVEN = -2;
+
+		/*
+		 * Takes a user command and splits it into a commandWord and associated
+		 * parameters
+		 */
+		public UserCommandInterpretter(String command) {
+			Scanner userCommandReader = new Scanner(command);
+			try {
+				/* set default values */
+				this._strparam = "";
+				this._intparam = VALUE_NOT_SET;
+				this._command = Command.UNKNOWN;
+
+				String commandWord = userCommandReader.next().toLowerCase();
+				switch (commandWord) {
+				case "add":
+					this._command = Command.ADD;
+					this._strparam = userCommandReader.nextLine().trim();
+					break;
+				case "delete":
+					this._command = Command.DELETE;
+					this._intparam = GetIntegerFromGivenString(userCommandReader
+							.nextLine().trim());
+					break;
+				case "display":
+					this._command = Command.DISPLAY;
+					break;
+				case "clear":
+					this._command = Command.CLEAR;
+					break;
+				case "exit":
+					this._command = Command.EXIT;
+					break;
+				default:
+					this._command = Command.UNKNOWN;
+					this._strparam = commandWord;
+					break;
+				}
+			} catch (NoSuchElementException e) {
+				if (this._command == Command.UNKNOWN) {
+					this._strparam = "Given word is not a recognised command!";
+					this._command = Command.UNKNOWN;
+					this._intparam = WRONG_VALUE_GIVEN;
+				} else if(this._command == Command.ADD) {
+					this._strparam = "";
+				} else {
+					this._strparam = "Command inexecutable with given parameters!";
+					this._command = Command.UNKNOWN;
+					this._intparam = WRONG_VALUE_GIVEN;
+				}
+
+			} finally {
+				userCommandReader.close();
+			}
+		}
+
+		private int GetIntegerFromGivenString(String parameter) {
+			int requiredInt;
+			try {
+				requiredInt = Integer.parseInt(parameter);
+			} catch (NumberFormatException nfe) {
+				requiredInt = WRONG_VALUE_GIVEN;
+				this._strparam = "Given value is not a valid integer!";
+			}
+			return requiredInt;
+		}
+	}
+
 }
