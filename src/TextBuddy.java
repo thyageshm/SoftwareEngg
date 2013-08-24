@@ -34,8 +34,11 @@ public class TextBuddy implements Runnable {
 		public int _intparam;
 		final int VALUE_NOT_SET = -1;
 		final int WRONG_VALUE_GIVEN = -2;
-		
-		/* Takes a user command and splits it into a commandWord and associated parameters*/
+
+		/*
+		 * Takes a user command and splits it into a commandWord and associated
+		 * parameters
+		 */
 		public UserCommandInterpretter(String command) {
 			Scanner userCommandReader = new Scanner(command);
 			String commandWord = userCommandReader.next().toLowerCase();
@@ -87,10 +90,10 @@ public class TextBuddy implements Runnable {
 	 * the private attributes include: a string for the name file being used a
 	 * BufferedWriter object to allow for writing to/saving the file a
 	 * linked-list of strings for quick local executions before saving into file
-	 * a Scanner object to parse the user input
-	 * an autosaver thread that does the actual modification of the files
-	 * a linkedblockingqueue to save the changes which is then read by our autosaver while saving
-	 * _hasChanged value to notify autosave whether any changes are there to be saved 
+	 * a Scanner object to parse the user input an autosaver thread that does
+	 * the actual modification of the files a linkedblockingqueue to save the
+	 * changes which is then read by our autosaver while saving _hasChanged
+	 * value to notify autosave whether any changes are there to be saved
 	 * _hasEnded to notify the autosaver that the program has been terminated
 	 * _hasNotClosed is so that housekeeping is not re-done
 	 */
@@ -100,9 +103,7 @@ public class TextBuddy implements Runnable {
 	private Scanner _inputStream = new Scanner(System.in);
 	private Thread _autoSaver = null;
 	private LinkedBlockingQueue<UserCommandInterpretter> _unsavedChanges = new LinkedBlockingQueue<UserCommandInterpretter>();
-	private boolean _hasChanged = false;
 	private boolean _hasNotClosed = true;
-	private boolean _hasEnded = false;
 
 	public TextBuddy(String fileName) throws IOException,
 			FileNotFoundException, SecurityException {
@@ -203,6 +204,7 @@ public class TextBuddy implements Runnable {
 				out.println(this.clearFileData(newCommand));
 				break;
 			case EXIT:
+				this.logTheChange(new UserCommandInterpretter("exit"));
 				return;
 			case UNKNOWN:
 				String givenCommand = newCommand._strparam;
@@ -223,7 +225,6 @@ public class TextBuddy implements Runnable {
 		_localCopyOfFileData.add(toAdd);
 		this.logTheChange(newCommand);
 
-		this._hasChanged = true;
 		returnMessage = "added to " + this._fileName + ": \"" + toAdd + "\"";
 
 		return returnMessage;
@@ -239,7 +240,6 @@ public class TextBuddy implements Runnable {
 		} else if (indexToDelete < 1 || indexToDelete > lengthOfAvailableData) {
 			returnMessage = "Given index is out-of-range of the available number of lines!";
 		} else {
-			this._hasChanged = true;
 			this.logTheChange(newCommand);
 			returnMessage = "deleted from " + this._fileName + ": \""
 					+ _localCopyOfFileData.remove(indexToDelete - 1) + "\"";
@@ -251,7 +251,6 @@ public class TextBuddy implements Runnable {
 	public String clearFileData(UserCommandInterpretter newCommand) {
 		this.logTheChange(newCommand);
 		this._localCopyOfFileData.clear();
-		this._hasChanged = true;
 		return "all content deleted from " + this._fileName;
 	}
 
@@ -278,43 +277,59 @@ public class TextBuddy implements Runnable {
 		}
 	}
 
+	/*
+	 * Runs infinitely saving any changes made until interrupted by the main
+	 * thread
+	 */
 	public void saveToFile() {
 		try {
 			UserCommandInterpretter logData;
+			while (true) {
+				logData = this._unsavedChanges.take();
 
-			while ((logData = this._unsavedChanges.poll()) != null) {
-				switch (logData._command) {
-				case ADD:
-					this._bufFileWriter.write(logData._strparam);
-					this._bufFileWriter.newLine();
-					break;
-				case DELETE:
-					int lineNumber = logData._intparam;
-					this.deleteLineFromFile(lineNumber);
-					break;
-				case CLEAR:
-					this._bufFileWriter.close();
-					this._bufFileWriter = new BufferedWriter(new FileWriter(
-							new File(this._fileName)));
-					break;
-				default:
-					out.println("An internal error occurred as Save!");
-					System.exit(0);
-				}
+					switch (logData._command) {
+					case ADD:
+						this._bufFileWriter.write(logData._strparam);
+						this._bufFileWriter.newLine();
+						break;
+					case DELETE:
+						int lineNumber = logData._intparam;
+						this.deleteLineFromFile(lineNumber);
+						break;
+					case CLEAR:
+						this._bufFileWriter.close();
+						this._bufFileWriter = new BufferedWriter(new FileWriter(
+								new File(this._fileName)));
+						break;
+					case EXIT:
+						return;
+					default:
+						out.println("An internal error occurred as Save!");
+						System.exit(0);
+					}
+					_bufFileWriter.flush();
 			}
-
-			_bufFileWriter.flush();
-			this._hasChanged = false;
 		} catch (IOException io) {
 			out.println(this._fileName
 					+ " can no longer be modified by the program! Please restart the program to ensure that the changes you make are saved to the disk");
-			return;
-		} finally
-		{
-			
+		} catch (InterruptedException ie) {
+			out.println("save interrupted! size: "
+					+ this._unsavedChanges.size());
+			/*
+			 * Deliberately left empty as the this thread is interrupted by the
+			 * main thread with deliberation
+			 */
+		} finally {
+			try {
+				_bufFileWriter.flush();
+			} catch (IOException io) {
+				out.println("The file could not be saved! We apologise for any inconvenience caused.");
+			}
 		}
+		return;
 	}
 
+	/* Deletes a particular line given the number from the file */
 	private boolean deleteLineFromFile(int lineNumber) {
 
 		File tempFile = null;
@@ -380,45 +395,27 @@ public class TextBuddy implements Runnable {
 		return true;
 	}
 
-	/* the function that does the auto-saving whenever necessary */
 	public void run() {
-
-		try {
-			while (!this._hasEnded) {
-				Thread.currentThread().wait(5000);
-				out.println("child calling save!");
-				this.saveToFile();
-				out.println("child save done!");
-			}
-		} catch (InterruptedException ie) {
-			out.println("Autosaver was interrupted!");
-			return;
-		}
-		out.println("run is ending..");
-
+		this.saveToFile();
 	}
 
 	public void close() {
 		if (_autoSaver != null) {
 			try {
-				this._hasEnded = true;
-				if (this._unsavedChanges.isEmpty()) {
-					this._autoSaver.interrupt();
-				}
+				//wait for auto-saver to complete its job
 				this._autoSaver.join();
-			} catch (InterruptedException ie) {
-				out.println("The main program thread was affected by the _autoSaver thread!");
 			} catch (SecurityException se) {
 				out.println("The main thread has lost access to the _autoSaver thread!");
+			} catch (InterruptedException ie)
+			{
+				ie.printStackTrace();
 			}
 		}
-
-		if (this._hasChanged) {
-			this.saveToFile();
-		}
-
+		
+		this._unsavedChanges.clear();
 		this._localCopyOfFileData.clear();
 		this._fileName = "";
+		this._autoSaver = null;
 		this._inputStream.close();
 		try {
 			if (_bufFileWriter != null)
@@ -446,7 +443,6 @@ public class TextBuddy implements Runnable {
 		return false;
 	}
 
-	
 	public static void main(String[] args) {
 		boolean isValidParameter = validateParameter(args);
 
