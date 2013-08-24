@@ -1,5 +1,7 @@
-//NOTE!!! handle the situation where the command is "display a"
-//			handle the try catch with a finally block (for file handler closing)!
+/**
+ * @author Thyagesh Manikandan (A0100124J)
+ */
+
 /*********Assumptions*********
  * - if an unknown command is given, let the user know that it is an unknown command
  * - if the given files exists, load the data from it so that an initial display call can be made
@@ -15,6 +17,7 @@ import java.io.FileWriter;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.Scanner;
 import java.util.LinkedList;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -104,6 +107,7 @@ public class TextBuddy implements Runnable {
 	private Thread _autoSaver = null;
 	private LinkedBlockingQueue<UserCommandInterpretter> _unsavedChanges = new LinkedBlockingQueue<UserCommandInterpretter>();
 	private boolean _hasNotClosed = true;
+	private boolean _hasEnded = false;
 
 	public TextBuddy(String fileName) throws IOException,
 			FileNotFoundException, SecurityException {
@@ -286,7 +290,14 @@ public class TextBuddy implements Runnable {
 			UserCommandInterpretter logData;
 			while (true) {
 				logData = this._unsavedChanges.take();
-
+				// a performance enhancement where regardless of how many items are left in the queue, if the program is over, write the local copy to the file
+				if(logData._command != Command.EXIT && this._hasEnded)
+				{
+					this.writeLocalCopyToFile();
+					return;
+				}
+				else
+				{
 					switch (logData._command) {
 					case ADD:
 						this._bufFileWriter.write(logData._strparam);
@@ -308,6 +319,7 @@ public class TextBuddy implements Runnable {
 						System.exit(0);
 					}
 					_bufFileWriter.flush();
+				}
 			}
 		} catch (IOException io) {
 			out.println(this._fileName
@@ -327,6 +339,32 @@ public class TextBuddy implements Runnable {
 			}
 		}
 		return;
+	}
+
+	private void writeLocalCopyToFile() {
+		try
+		{
+			this._bufFileWriter.close();
+			this._bufFileWriter = new BufferedWriter(new FileWriter(new File(this._fileName)));
+			Iterator<String> iter = this._localCopyOfFileData.iterator();
+			while(iter.hasNext())
+			{
+				this._bufFileWriter.write(iter.next());
+				this._bufFileWriter.newLine();
+			}
+		} catch(IOException ioe)
+		{
+			ioe.printStackTrace();
+		} finally
+		{
+			try
+			{
+				this._bufFileWriter.flush();
+			} catch(IOException ioe)
+			{
+				ioe.printStackTrace();
+			}
+		}
 	}
 
 	/* Deletes a particular line given the number from the file */
@@ -402,7 +440,9 @@ public class TextBuddy implements Runnable {
 	public void close() {
 		if (_autoSaver != null) {
 			try {
-				//wait for auto-saver to complete its job
+				//inform the auto saver that the program has ended
+				this._hasEnded = true;
+				//wait for auto saver to complete its job
 				this._autoSaver.join();
 			} catch (SecurityException se) {
 				out.println("The main thread has lost access to the _autoSaver thread!");
@@ -411,11 +451,11 @@ public class TextBuddy implements Runnable {
 				ie.printStackTrace();
 			}
 		}
-		
+
+		this._autoSaver = null;
 		this._unsavedChanges.clear();
 		this._localCopyOfFileData.clear();
 		this._fileName = "";
-		this._autoSaver = null;
 		this._inputStream.close();
 		try {
 			if (_bufFileWriter != null)
