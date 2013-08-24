@@ -18,6 +18,7 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.Scanner;
 import java.util.LinkedList;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -44,37 +45,55 @@ public class TextBuddy implements Runnable {
 		 */
 		public UserCommandInterpretter(String command) {
 			Scanner userCommandReader = new Scanner(command);
-			String commandWord = userCommandReader.next().toLowerCase();
-
-			/* set default values */
-			this._strparam = "";
-			this._intparam = VALUE_NOT_SET;
-
-			switch (commandWord) {
-			case "add":
-				this._command = Command.ADD;
-				this._strparam = userCommandReader.nextLine().trim();
-				break;
-			case "delete":
-				this._command = Command.DELETE;
-				this._intparam = GetIntegerFromGivenString(userCommandReader
-						.nextLine().trim());
-				break;
-			case "display":
-				this._command = Command.DISPLAY;
-				break;
-			case "clear":
-				this._command = Command.CLEAR;
-				break;
-			case "exit":
-				this._command = Command.EXIT;
-				break;
-			default:
+			try
+			{
+				/* set default values */
+				this._strparam = "";
+				this._intparam = VALUE_NOT_SET;
 				this._command = Command.UNKNOWN;
-				this._strparam = commandWord;
-				break;
+				
+				String commandWord = userCommandReader.next().toLowerCase();
+				switch (commandWord) {
+				case "add":
+					this._command = Command.ADD;
+					this._strparam = userCommandReader.nextLine().trim();
+					break;
+				case "delete":
+					this._command = Command.DELETE;
+					this._intparam = GetIntegerFromGivenString(userCommandReader
+							.nextLine().trim());
+					break;
+				case "display":
+					this._command = Command.DISPLAY;
+					break;
+				case "clear":
+					this._command = Command.CLEAR;
+					break;
+				case "exit":
+					this._command = Command.EXIT;
+					break;
+				default:
+					this._command = Command.UNKNOWN;
+					this._strparam = commandWord;
+					break;
+				}
+			} catch(NoSuchElementException e)
+			{
+				if (this._command != Command.UNKNOWN)
+				{
+					this._strparam = "Command inexecutable with given parameters!";
+				}
+				else
+				{
+					this._strparam = "Given word is not a recognised command!";
+				}
+				this._command = Command.UNKNOWN;
+				this._intparam = WRONG_VALUE_GIVEN;
+				
+			} finally
+			{
+				userCommandReader.close();
 			}
-			userCommandReader.close();
 		}
 
 		private int GetIntegerFromGivenString(String parameter) {
@@ -211,9 +230,8 @@ public class TextBuddy implements Runnable {
 				this.logTheChange(new UserCommandInterpretter("exit"));
 				return;
 			case UNKNOWN:
-				String givenCommand = newCommand._strparam;
-				out.println("Given word -" + givenCommand
-						+ "- is not a recognised command!");
+				String responseToUser = newCommand._strparam;
+				out.println(responseToUser);
 				break;
 			default:
 				out.println("An internal error has occurred!");
