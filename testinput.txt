@@ -1,10 +1,11 @@
 a
 display
-add 
-delete 
-delete 1
+add
 delete a
+delete 1
+delete
 clear
+
 add Hello World!
 add maybe
 add this one is a very long comment..!@

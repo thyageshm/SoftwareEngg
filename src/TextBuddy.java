@@ -1,15 +1,3 @@
-/**
- * @author Thyagesh Manikandan (A0100124J)
- */
-
-/*********Assumptions*********
- * - if an unknown command is given, let the user know that it is an unknown command
- * - if the given files exists, load the data from it so that an initial display call can be made
- * - if the given file has problems or the program is unable to create a file with the given name, exit gracefully
- * - if "display" is followed by any other characters, ignore them
- * - user command is not case sensitive
- * - an add command with no parameters is taken as a newline request
- */
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -25,20 +13,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import static java.lang.System.out;
 
-// This class runs the whole TextBuddy program
 public class TextBuddy implements Runnable {
 
-	/*
-	 * the private attributes include: a string for the name file being used a
-	 * BufferedWriter object to allow for writing to/saving the file a
-	 * linked-list of strings for quick local executions before saving into file
-	 * a Scanner object to parse the user input an autosaver thread that does
-	 * the actual modification of the files a linkedblockingqueue to save the
-	 * changes which is then read by our autosaver while saving _hasChanged
-	 * value to notify autosave whether any changes are there to be saved
-	 * _hasEnded to notify the autosaver that the program has been terminated
-	 * _hasNotClosed is so that housekeeping is not re-done
-	 */
+	/* Class Attributes */
+
 	private String _fileName;
 	private BufferedWriter _bufFileWriter = null;
 	private LinkedList<String> _localCopyOfFileData = new LinkedList<String>();
@@ -48,20 +26,36 @@ public class TextBuddy implements Runnable {
 	private boolean _hasNotClosed = true;
 	private boolean _hasEnded = false;
 
+	private static final String MESSAGE_INTERNAL_ERROR = "An iternal error has occurred%s! We apologise for the inconvenience caused!";
+	private static final String MESSAGE_INTERNAL_ERROR_SAVE = String
+			.format(MESSAGE_INTERNAL_ERROR,
+					" while trying to save the changes to file");
+
+	private static final String MESSAGE_REQUEST_USER_FOR_COMMAND = "command: ";
+	private static final String MESSAGE_GREET_USER = "Welcome to TextBuddy. %s is ready for use";
+
+	private static final String MESSAGE_FEEDBACK_FOR_ADD = "added to %s: \"%s\"";
+	private static final String MESSAGE_FEEDBACK_FOR_DELETE = "deleted from %s: \"%s\"";
+	private static final String MESSAGE_FEEDBACK_FOR_CLEAR = "all content deleted from %s";
+	private static final String MESSAGE_FEEDBACK_FOR_EMPTY_DISPLAY = "%s is empty";
+
+	/* Class Methods */
+
 	public TextBuddy(String fileName) throws IOException,
 			FileNotFoundException, SecurityException {
+
 		validateAndSaveParameter(fileName);
 		this.initialiseFileHandling(fileName);
 		this.initialiseAutoSaver();
 	}
 
 	private void validateAndSaveParameter(String fileName) {
-		boolean isValidParameter = validateParameter(new String[] { fileName });
+		boolean isValidParameter = fileName.length() > 0;
 		if (isValidParameter) {
 			this._fileName = fileName;
 			return;
 		}
-		out.println("Given paramter does not contain a file name!");
+		this.informUser("Given paramter does not contain a file name!");
 		System.exit(0);
 	}
 
@@ -88,7 +82,7 @@ public class TextBuddy implements Runnable {
 	}
 
 	/*
-	 * Loads the existing data from the file and populate the local copy of the
+	 * Loads the existing data from the file and fills the local copy with the
 	 * data
 	 */
 	private void readExistingDataFromFile(File givenFile) throws IOException,
@@ -103,15 +97,16 @@ public class TextBuddy implements Runnable {
 				this._localCopyOfFileData.add(lineReader);
 			}
 			bufFileReader.close();
+		} else if (givenFile.createNewFile()) {
+			/* Everything's fine, we can return normally */
+			return;
 		} else {
-			if (!givenFile.createNewFile()) {
-				out.println("Could not create a new file in the disk! Permissions not given!");
-			}
+			throw new IOException(
+					"Could not create a new file in the disk! Permissions not given!");
 		}
 	}
 
 	/* A simple function to kick start TextBuddy */
-
 	public void start() {
 		_autoSaver.start();
 		this.interactWithUserUntilExitCommand();
@@ -119,112 +114,144 @@ public class TextBuddy implements Runnable {
 	}
 
 	/*
-	 * Greets the User, reads commands and calls the appropriate function to be
-	 * executed
+	 * Greets the user and calls the appropriate functions to be executed
 	 */
 	public void interactWithUserUntilExitCommand() {
-		out.println("Welcome to TextBuddy. " + this._fileName
-				+ " is ready for use");
-
-		String command = new String("");
+		out.printf(MESSAGE_GREET_USER, this._fileName);
 
 		while (true) {
-			out.print("command: ");
+			UserCommandInterpretter newCommand = getNewUserCommand();
 
-			command = _inputStream.nextLine();
-			UserCommandInterpretter newCommand = new UserCommandInterpretter(
-					command);
-			switch (newCommand._command) {
+			switch (newCommand.getCommand()) {
 			case ADD:
-				out.println(this.addLineToLocalData(newCommand));
+				this.handleAddCommand(newCommand);
 				break;
 			case DELETE:
-				out.println(deleteLineFromLocalData(newCommand));
+				this.handleDeleteCommand(newCommand);
 				break;
 			case DISPLAY:
-				out.println(this.displayLocalData());
+				this.handleDisplayCommand();
 				break;
 			case CLEAR:
-				out.println(this.clearLocalData(newCommand));
+				this.handleClearCommand(newCommand);
+				break;
+			case UNKNOWN:
+				this.handleUnknownCommand(newCommand);
 				break;
 			case EXIT:
-				this.logTheChange(new UserCommandInterpretter("exit"));
+				this.handleExitCommand(newCommand);
 				return;
-			case UNKNOWN:
-				String responseToUser = newCommand._strparam;
-				out.println(responseToUser);
-				break;
 			default:
-				out.println("An internal error has occurred!");
+				out.printf(MESSAGE_INTERNAL_ERROR,
+						" while trying to comprehend user's command");
 				System.exit(0);
 			}
 		}
 	}
 
-	private String addLineToLocalData(UserCommandInterpretter newCommand) {
-		String returnMessage = "";
-		String toAdd = newCommand._strparam;
+	private UserCommandInterpretter getNewUserCommand() {
+		this.informUser(MESSAGE_REQUEST_USER_FOR_COMMAND);
+		String command = _inputStream.nextLine();
 
-		_localCopyOfFileData.add(toAdd);
-		this.logTheChange(newCommand);
-
-		returnMessage = "added to " + this._fileName + ": \"" + toAdd + "\"";
-
-		return returnMessage;
+		UserCommandInterpretter newCommand = new UserCommandInterpretter(
+				command);
+		return newCommand;
 	}
 
-	public String deleteLineFromLocalData(UserCommandInterpretter newCommand) {
-		String returnMessage = "";
-		int indexToDelete = newCommand._intparam;
+	/** Handler functions */
+	private void handleAddCommand(UserCommandInterpretter addCommand) {
+		String toAdd = addCommand.getStringParameter();
+
+		this._localCopyOfFileData.add(toAdd);
+		this.logTheChange(addCommand);
+
+		String feedbackMessage = String.format(MESSAGE_FEEDBACK_FOR_ADD,
+				this._fileName, toAdd);
+		this.informUser(feedbackMessage);
+	}
+
+	public void handleDeleteCommand(UserCommandInterpretter deleteCommand) {
+		String feedbackMessage = "";
+		int indexToDelete = deleteCommand.getIntParameter();
 		int lengthOfAvailableData = this._localCopyOfFileData.size();
 
-		if (indexToDelete == newCommand.WRONG_VALUE_GIVEN) {
-			returnMessage = newCommand._strparam;
+		if (indexToDelete == deleteCommand.WRONG_VALUE_GIVEN) {
+			feedbackMessage = deleteCommand.getErrorString();
+
 		} else if (indexToDelete < 1 || indexToDelete > lengthOfAvailableData) {
-			returnMessage = "Given index is out-of-range of the available number of lines!";
+			feedbackMessage = "Given index is out-of-range of the available number of lines!";
+
 		} else {
-			this.logTheChange(newCommand);
-			returnMessage = "deleted from " + this._fileName + ": \""
-					+ _localCopyOfFileData.remove(indexToDelete - 1) + "\"";
+			this.logTheChange(deleteCommand);
+			String deletedString = _localCopyOfFileData
+					.remove(indexToDelete - 1);
+
+			feedbackMessage = String.format(MESSAGE_FEEDBACK_FOR_DELETE,
+					this._fileName, deletedString);
 		}
-
-		return returnMessage;
+		informUser(feedbackMessage);
 	}
 
-	public String clearLocalData(UserCommandInterpretter newCommand) {
-		this.logTheChange(newCommand);
-		this._localCopyOfFileData.clear();
-		return "all content deleted from " + this._fileName;
-	}
+	public void handleDisplayCommand() {
+		String feedbackMessage = "";
+		boolean isFileEmpty = this._localCopyOfFileData.size() == 0;
 
-	public String displayLocalData() {
-		String returnString = "";
-		for (int index = 0; index < _localCopyOfFileData.size(); index++) {
-			if (index > 0) {
-				returnString += System.lineSeparator();
+		if (isFileEmpty) {
+			feedbackMessage = String.format(MESSAGE_FEEDBACK_FOR_EMPTY_DISPLAY,
+					this._fileName);
+		} else {
+			for (int index = 0; index < _localCopyOfFileData.size(); index++) {
+				feedbackMessage += (index + 1) + ". "
+						+ _localCopyOfFileData.get(index)
+						+ System.lineSeparator();
 			}
-			returnString += (index + 1) + ". "
-					+ _localCopyOfFileData.get(index);
 		}
-		if (returnString.isEmpty())
-			returnString += this._fileName + " is empty";
-		return returnString;
+		/* trim() to remove the trailing new line */
+		informUser(feedbackMessage.trim());
 	}
 
+	public void handleClearCommand(UserCommandInterpretter clearCommand) {
+		String feedbackMessage = String.format(MESSAGE_FEEDBACK_FOR_CLEAR,
+				this._fileName);
+
+		this._localCopyOfFileData.clear();
+		this.logTheChange(clearCommand);
+
+		informUser(feedbackMessage);
+	}
+
+	private void handleExitCommand(UserCommandInterpretter exitCommand) {
+		this.logTheChange(exitCommand);
+	}
+
+	private void handleUnknownCommand(UserCommandInterpretter unknownCommand) {
+		String errorString = unknownCommand.getErrorString();
+		this.informUser(errorString);
+	}
+
+	/* Takes a message and informs the user appropriately */
+	public void informUser(String message) {
+		out.println(message);
+	}
+
+	/* Logs the new command for it to be saved */
 	/* adds the new command to the unsaved changes queue */
 	private void logTheChange(UserCommandInterpretter newCommand) {
 		try {
 			this._unsavedChanges.put(newCommand);
 		} catch (InterruptedException ie) {
-			out.println("Could not log the change!");
+			this.informUser("Interrupted while logging the change!");
 			return;
 		}
 	}
 
+	/* Auto save thread's run function */
+	/* The Auto-save thread's run method */
 	public void run() {
 		this.saveToFile();
 	}
 
+	/* Actually saves the changes to the file */
 	/* Runs infinitely saving any changes made until program ends */
 	public void saveToFile() {
 		try {
@@ -234,7 +261,7 @@ public class TextBuddy implements Runnable {
 				// a performance enhancement where regardless of how many items
 				// are left in the queue, if the program is over, write the
 				// local copy to the file
-				if (logData._command != Command.EXIT && this._hasEnded) {
+				if (logData._command != COMMAND_TYPE.EXIT && this._hasEnded) {
 					this.writeLocalCopyToFile();
 					return;
 				} else {
@@ -245,7 +272,7 @@ public class TextBuddy implements Runnable {
 						break;
 					case DELETE:
 						int lineNumber = logData._intparam;
-						this.deleteLineFromFile(lineNumber);
+						this.deleteFromFile(lineNumber);
 						break;
 					case CLEAR:
 						this._bufFileWriter.close();
@@ -255,81 +282,30 @@ public class TextBuddy implements Runnable {
 					case EXIT:
 						return;
 					default:
-						out.println("An internal error occurred as Save!");
+						out.printf(MESSAGE_INTERNAL_ERROR_SAVE);
 						System.exit(0);
 					}
 					_bufFileWriter.flush();
 				}
 			}
 		} catch (IOException io) {
-			out.println(this._fileName
+			this.informUser(this._fileName
 					+ " can no longer be modified by the program! Please restart the program to ensure that the changes you make are saved to the disk");
 		} catch (InterruptedException ie) {
-			out.println("save interrupted! size: " + this._unsavedChanges.size());
+			out.printf(MESSAGE_INTERNAL_ERROR_SAVE);
 		} finally {
 			try {
 				_bufFileWriter.flush();
 			} catch (IOException io) {
-				out.println("The file could not be saved! We apologise for any inconvenience caused.");
+				out.printf(MESSAGE_INTERNAL_ERROR_SAVE);
 			}
 		}
 		return;
 	}
 
-	/* House keeping work */
-	public void close() {
-		if (_autoSaver != null) {
-			try {
-				// inform the auto saver that the program has ended
-				this._hasEnded = true;
-				// wait for auto saver to complete its job
-				this._autoSaver.join();
-			} catch (SecurityException se) {
-				out.println("The main thread has lost access to the _autoSaver thread!");
-			} catch (InterruptedException ie) {
-				ie.printStackTrace();
-			}
-		}
-
-		this._autoSaver = null;
-		this._unsavedChanges.clear();
-		this._localCopyOfFileData.clear();
-		this._fileName = "";
-		this._inputStream.close();
-		try {
-			if (_bufFileWriter != null)
-				this._bufFileWriter.close();
-		} catch (IOException io) {
-			out.println("An error occurred while trying to close the file hander!");
-		}
-		this._hasNotClosed = false;
-	}
-
-	
-	private void writeLocalCopyToFile() {
-		try {
-			this._bufFileWriter.close();
-			this._bufFileWriter = new BufferedWriter(new FileWriter(new File(
-					this._fileName)));
-			Iterator<String> iter = this._localCopyOfFileData.iterator();
-			while (iter.hasNext()) {
-				this._bufFileWriter.write(iter.next());
-				this._bufFileWriter.newLine();
-			}
-		} catch (IOException ioe) {
-			ioe.printStackTrace();
-		} finally {
-			try {
-				this._bufFileWriter.flush();
-			} catch (IOException ioe) {
-				ioe.printStackTrace();
-			}
-		}
-	}
-
+	/* helps saveToFile() in the deletion operation */
 	/* Deletes a particular line given the number from the file */
-	
-	private boolean deleteLineFromFile(int lineNumber) {
+	private boolean deleteFromFile(int lineNumber) {
 
 		File tempFile = null;
 		File oldFile = new File(this._fileName);
@@ -348,7 +324,7 @@ public class TextBuddy implements Runnable {
 					bufTempWriter.write(tempLineReader);
 					bufTempWriter.newLine();
 				} else {
-					out.println("The program has accidently affected the file's content. Please use a backup copy of the data if any to continue. We sincerely apologise for the mishappening");
+					out.printf(MESSAGE_INTERNAL_ERROR_SAVE);
 					System.exit(0);
 				}
 			}
@@ -373,10 +349,10 @@ public class TextBuddy implements Runnable {
 					true));
 
 		} catch (IOException io) {
-			out.println("The file can not longer be accessed to be saved! Please restart the program.");
+			this.informUser("The file can not longer be accessed to be saved! Please restart the program.");
 			return false;
 		} catch (SecurityException se) {
-			out.println("A temporary file could not be created to save the file");
+			this.informUser("Access Denied to modify file system in order to save the changes!");
 			return false;
 		} finally {
 			try {
@@ -387,11 +363,63 @@ public class TextBuddy implements Runnable {
 					bufTempWriter.close();
 				}
 			} catch (IOException ioe) {
-				out.println("Could not close the file handlers that were created!");
+				this.informUser("Could not close the file handlers that were created!");
 				System.exit(0);
 			}
 		}
 		return true;
+	}
+
+	/* a performance enhancement to save multiple unsaved changes at once */
+	/* Quick storage of local copy to the file */
+	private void writeLocalCopyToFile() {
+		try {
+			this._bufFileWriter.close();
+			this._bufFileWriter = new BufferedWriter(new FileWriter(new File(
+					this._fileName)));
+			Iterator<String> iter = this._localCopyOfFileData.iterator();
+			while (iter.hasNext()) {
+				this._bufFileWriter.write(iter.next());
+				this._bufFileWriter.newLine();
+			}
+		} catch (IOException ioe) {
+			ioe.printStackTrace();
+		} finally {
+			try {
+				this._bufFileWriter.flush();
+			} catch (IOException ioe) {
+				ioe.printStackTrace();
+			}
+		}
+	}
+
+	/* House keeping work */
+	public void close() {
+		if (_autoSaver != null) {
+			try {
+				// inform the auto saver that the program has ended
+				this._hasEnded = true;
+				// wait for auto saver to complete its job
+				this._autoSaver.join();
+			} catch (SecurityException se) {
+				out.printf(MESSAGE_INTERNAL_ERROR, "");
+			} catch (InterruptedException ie) {
+				ie.printStackTrace();
+			}
+		}
+
+		this._autoSaver = null;
+		this._unsavedChanges.clear();
+		this._localCopyOfFileData.clear();
+		this._fileName = "";
+		this._inputStream.close();
+		try {
+			if (_bufFileWriter != null)
+				this._bufFileWriter.close();
+		} catch (IOException io) {
+			this.informUser("An error occurred while trying to close the file hander!");
+		}
+		this._hasNotClosed = false;
 	}
 
 	/* call close in case it wasn't */
@@ -399,17 +427,6 @@ public class TextBuddy implements Runnable {
 		if (this._hasNotClosed) {
 			this.close();
 		}
-	}
-
-	private static boolean validateParameter(String fileName[]) {
-		boolean singleParameterGiven = fileName.length == 1;
-
-		if (singleParameterGiven) {
-			boolean parameterIsNotEmpty = fileName[0].length() > 0;
-			return parameterIsNotEmpty;
-		}
-
-		return false;
 	}
 
 	public static void main(String[] args) {
@@ -420,7 +437,7 @@ public class TextBuddy implements Runnable {
 				TextBuddy Textbuddy = new TextBuddy(args[0]);
 				Textbuddy.start();
 			} catch (FileNotFoundException fe) {
-				out.println("Given file could not be accessed!");
+				out.println("Given file could not be opened for reading/writing.");
 			} catch (IOException io) {
 				out.println("An input-output exception occurred while trying to open/read from/write into the file given!");
 			} catch (SecurityException se) {
@@ -432,81 +449,126 @@ public class TextBuddy implements Runnable {
 		return;
 	}
 
-	private enum Command {
+	/* Used by main to validate before initializing TextBuddy */
+	/* Checks if the user has provided a filename to work with */
+	private static boolean validateParameter(String fileName[]) {
+		boolean singleParameterGiven = fileName.length == 1;
+
+		if (singleParameterGiven) {
+			boolean parameterIsNotEmpty = fileName[0].length() > 0;
+			return parameterIsNotEmpty;
+		}
+
+		return false;
+	}
+
+	/* An enumeration for all possible commands */
+	private enum COMMAND_TYPE {
 		ADD, DELETE, CLEAR, DISPLAY, EXIT, UNKNOWN
 	}
 
+	/* Dissects user commands into the various components*/
 	private class UserCommandInterpretter {
-		public Command _command;
+		public COMMAND_TYPE _command;
 		public String _strparam;
 		public int _intparam;
 		final int VALUE_NOT_SET = -1;
 		final int WRONG_VALUE_GIVEN = -2;
+		private static final String UNKNOWN_COMMAND_RESPONSE_STRING = "Given word is not a recognised command!";
+		private static final String WRONG_PARAMETERS_GIVEN_RESPONSE_STRING = "Given command inexecutable with given parameters!";
+		
+		private Scanner _userCommandReader;
 
 		/*
 		 * Takes a user command and splits it into a commandWord and associated
 		 * parameters
 		 */
 		public UserCommandInterpretter(String command) {
-			Scanner userCommandReader = new Scanner(command);
-			try {
-				/* set default values */
-				this._strparam = "";
-				this._intparam = VALUE_NOT_SET;
-				this._command = Command.UNKNOWN;
+			/* set default values */
+			this._strparam = "";
+			this._intparam = VALUE_NOT_SET;
+			this._command = COMMAND_TYPE.UNKNOWN;
+			
+			this._userCommandReader = new Scanner(command);
+			this.dissectUserCommand();
+			this._userCommandReader.close();
+		}
 
-				String commandWord = userCommandReader.next().toLowerCase();
+		private void dissectUserCommand() {
+			try {
+				String commandWord = _userCommandReader.next().toLowerCase();
+				String userParameter = "";
+
 				switch (commandWord) {
 				case "add":
-					this._command = Command.ADD;
-					this._strparam = userCommandReader.nextLine().trim();
+					this._command = COMMAND_TYPE.ADD;
+					userParameter = _userCommandReader.nextLine().trim();
+					this._strparam = userParameter;
 					break;
 				case "delete":
-					this._command = Command.DELETE;
-					this._intparam = GetIntegerFromGivenString(userCommandReader
-							.nextLine().trim());
+					this._command = COMMAND_TYPE.DELETE;
+					userParameter = _userCommandReader.nextLine().trim();
+					this._intparam = getIntegerFromGivenString(userParameter);
 					break;
 				case "display":
-					this._command = Command.DISPLAY;
+					this._command = COMMAND_TYPE.DISPLAY;
 					break;
 				case "clear":
-					this._command = Command.CLEAR;
+					this._command = COMMAND_TYPE.CLEAR;
 					break;
 				case "exit":
-					this._command = Command.EXIT;
+					this._command = COMMAND_TYPE.EXIT;
 					break;
 				default:
-					this._command = Command.UNKNOWN;
-					this._strparam = commandWord;
+					this._strparam = UNKNOWN_COMMAND_RESPONSE_STRING;
+					this._command = COMMAND_TYPE.UNKNOWN;
+					this._intparam = WRONG_VALUE_GIVEN;
 					break;
 				}
 			} catch (NoSuchElementException e) {
-				if (this._command == Command.UNKNOWN) {
-					this._strparam = "Given word is not a recognised command!";
-					this._command = Command.UNKNOWN;
+				if (this._command == COMMAND_TYPE.UNKNOWN) 
+				{
+					this._strparam = UNKNOWN_COMMAND_RESPONSE_STRING;
+					this._command = COMMAND_TYPE.UNKNOWN;
 					this._intparam = WRONG_VALUE_GIVEN;
-				} else if(this._command == Command.ADD) {
+				} else if (this._command == COMMAND_TYPE.ADD) {
 					this._strparam = "";
 				} else {
-					this._strparam = "Command inexecutable with given parameters!";
-					this._command = Command.UNKNOWN;
+					this._strparam = WRONG_PARAMETERS_GIVEN_RESPONSE_STRING;
+					this._command = COMMAND_TYPE.UNKNOWN;
 					this._intparam = WRONG_VALUE_GIVEN;
 				}
 
-			} finally {
-				userCommandReader.close();
 			}
 		}
 
-		private int GetIntegerFromGivenString(String parameter) {
+		private int getIntegerFromGivenString(String parameter) {
 			int requiredInt;
+			String INTEGER_NOT_GIVEN = "Given value is not a valid integer!";
+			
 			try {
 				requiredInt = Integer.parseInt(parameter);
 			} catch (NumberFormatException nfe) {
 				requiredInt = WRONG_VALUE_GIVEN;
-				this._strparam = "Given value is not a valid integer!";
+				this._strparam = INTEGER_NOT_GIVEN;
 			}
 			return requiredInt;
+		}
+
+		public COMMAND_TYPE getCommand() {
+			return this._command;
+		}
+
+		public String getStringParameter() {
+			return this._strparam;
+		}
+
+		public int getIntParameter() {
+			return this._intparam;
+		}
+
+		public String getErrorString() {
+			return this._strparam;
 		}
 	}
 
