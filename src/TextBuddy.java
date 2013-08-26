@@ -476,6 +476,7 @@ public class TextBuddy implements Runnable {
 		final int WRONG_VALUE_GIVEN = -2;
 		private static final String UNKNOWN_COMMAND_RESPONSE_STRING = "Given word is not a recognised command!";
 		private static final String WRONG_PARAMETERS_GIVEN_RESPONSE_STRING = "Given command inexecutable with given parameters!";
+		private static final String MESSAGE_INTEGER_NOT_GIVEN = "Given value is not a valid integer!";
 		
 		private Scanner _userCommandReader;
 
@@ -489,70 +490,87 @@ public class TextBuddy implements Runnable {
 			this._intparam = VALUE_NOT_SET;
 			this._command = COMMAND_TYPE.UNKNOWN;
 			
-			this._userCommandReader = new Scanner(command);
-			this.dissectUserCommand();
-			this._userCommandReader.close();
+			if(!command.isEmpty())
+			{
+				this._userCommandReader = new Scanner(command);
+				this.dissectUserCommand();
+				this._userCommandReader.close();
+			} else
+			{
+				this._strparam = UNKNOWN_COMMAND_RESPONSE_STRING;
+				this._command = COMMAND_TYPE.UNKNOWN;
+				this._intparam = WRONG_VALUE_GIVEN;
+			}
 		}
 
 		private void dissectUserCommand() {
-			try {
-				String commandWord = _userCommandReader.next().toLowerCase();
-				String userParameter = "";
+			String commandWord = _userCommandReader.next().toLowerCase();
 
-				switch (commandWord) {
-				case "add":
-					this._command = COMMAND_TYPE.ADD;
-					userParameter = _userCommandReader.nextLine().trim();
-					this._strparam = userParameter;
-					break;
-				case "delete":
-					this._command = COMMAND_TYPE.DELETE;
-					userParameter = _userCommandReader.nextLine().trim();
-					this._intparam = getIntegerFromGivenString(userParameter);
-					break;
-				case "display":
-					this._command = COMMAND_TYPE.DISPLAY;
-					break;
-				case "clear":
-					this._command = COMMAND_TYPE.CLEAR;
-					break;
-				case "exit":
-					this._command = COMMAND_TYPE.EXIT;
-					break;
-				default:
-					this._strparam = UNKNOWN_COMMAND_RESPONSE_STRING;
-					this._command = COMMAND_TYPE.UNKNOWN;
-					this._intparam = WRONG_VALUE_GIVEN;
-					break;
-				}
-			} catch (NoSuchElementException e) {
-				if (this._command == COMMAND_TYPE.UNKNOWN) 
-				{
-					this._strparam = UNKNOWN_COMMAND_RESPONSE_STRING;
-					this._command = COMMAND_TYPE.UNKNOWN;
-					this._intparam = WRONG_VALUE_GIVEN;
-				} else if (this._command == COMMAND_TYPE.ADD) {
-					this._strparam = "";
-				} else {
-					this._strparam = WRONG_PARAMETERS_GIVEN_RESPONSE_STRING;
-					this._command = COMMAND_TYPE.UNKNOWN;
-					this._intparam = WRONG_VALUE_GIVEN;
-				}
-
+			switch (commandWord) {
+			case "add":
+				this.handleAddCommand();
+				break;
+			case "delete":
+				this.handleDeleteCommand();
+				break;
+			case "display":
+				this.handleDisplayCommand();
+				break;
+			case "clear":
+				this.handleClearCommand();
+				break;
+			case "exit":
+				this.handleExitCommand();
+				break;
+			default:
+				this._strparam = UNKNOWN_COMMAND_RESPONSE_STRING;
+				this._command = COMMAND_TYPE.UNKNOWN;
+				this._intparam = WRONG_VALUE_GIVEN;
+				break;
 			}
 		}
 
-		private int getIntegerFromGivenString(String parameter) {
-			int requiredInt;
-			String INTEGER_NOT_GIVEN = "Given value is not a valid integer!";
-			
-			try {
-				requiredInt = Integer.parseInt(parameter);
+		private void handleExitCommand() {
+			this._command = COMMAND_TYPE.EXIT;
+		}
+
+		private void handleClearCommand() {
+			this._command = COMMAND_TYPE.CLEAR;
+		}
+
+		private void handleDisplayCommand() {
+			this._command = COMMAND_TYPE.DISPLAY;
+		}
+
+		private void handleDeleteCommand() {
+			String userParameter;
+			this._command = COMMAND_TYPE.DELETE;
+			try
+			{
+				userParameter = _userCommandReader.nextLine().trim();
+				this._intparam = Integer.parseInt(userParameter);
+				
+			} catch (NoSuchElementException e)
+			{
+				this._strparam = WRONG_PARAMETERS_GIVEN_RESPONSE_STRING;
+				this._intparam = WRONG_VALUE_GIVEN;
 			} catch (NumberFormatException nfe) {
-				requiredInt = WRONG_VALUE_GIVEN;
-				this._strparam = INTEGER_NOT_GIVEN;
+				this._intparam = WRONG_VALUE_GIVEN;
+				this._strparam = MESSAGE_INTEGER_NOT_GIVEN;
 			}
-			return requiredInt;
+		}
+
+		private void handleAddCommand() {
+			String userParameter;
+			try
+			{
+				this._command = COMMAND_TYPE.ADD;
+				userParameter = _userCommandReader.nextLine().trim();
+				this._strparam = userParameter;
+			} catch (NoSuchElementException e)
+			{
+				this._strparam = "";
+			}
 		}
 
 		public COMMAND_TYPE getCommand() {
