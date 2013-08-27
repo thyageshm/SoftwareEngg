@@ -1,3 +1,4 @@
+/* @author Thyagesh Manikandan (A0100124J) */
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -12,7 +13,6 @@ import java.util.LinkedList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static java.lang.System.out;
-/* @author Thyagesh Manikandan (A0100124J) */
 
 /** 
  *  This class runs the whole TextBuddy program which is based on a few
@@ -381,7 +381,7 @@ public class TextBuddy implements Runnable
 		catch (IOException io)
 		{
 			this.informUser(this._fileName
-							+ " can no longer be modified by the program! Please restart the program to ensure that the changes you make are saved to the disk");
+							+ " can no longer be modified by the program! Please restart the program!");
 		}
 		catch (InterruptedException ie)
 		{
@@ -545,7 +545,9 @@ public class TextBuddy implements Runnable
 		try
 		{
 			if (_bufFileWriter != null)
+			{
 				this._bufFileWriter.close();
+			}
 		}
 		catch (IOException io)
 		{
